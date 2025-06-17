@@ -99,11 +99,11 @@ let videoEnd = false;
 const instructionsLength = Object.keys(instructions).length; // determine the number of instructions
 
 //create a bounding box for spawning the unwrap button
-const kitBoundingGeometry = new THREE.BoxGeometry(0.15, 0.1, 0.1);  
+const kitBoundingGeometry = new THREE.BoxGeometry(1, 0.3, 1);  
 const kitBoundingMaterial = new THREE.MeshBasicMaterial({ color: 0x0000ff, wireframe: true }); 
 const kitBounding = new THREE.Mesh(kitBoundingGeometry, kitBoundingMaterial);
-kitBounding.position.set( -0.1, 0.95, 1.13 );
-kitBounding.visible = false;
+kitBounding.position.set( 0, 1.1, 1.13 );
+kitBounding.visible = true;
 scene.add(kitBounding);
 
 const kitboundingBox = new THREE.Box3().setFromObject(kitBounding);
@@ -1105,27 +1105,27 @@ function animateLubricant() {
 
 
 //lubricant deployed
-function lubricantVisible(){
-    const params = {
-        color: '#ffffff', 
-        scale: 1,
-        flowX: 0,
-        flowY: 0
-    };
-    const waterGeometry = new THREE.PlaneGeometry( 0.143 , 0.047 );
+// function lubricantVisible(){
+//     const params = {
+//         color: '#ffffff', 
+//         scale: 1,
+//         flowX: 0,
+//         flowY: 0
+//     };
+//     const waterGeometry = new THREE.PlaneGeometry( 0.143 , 0.047 );
 
-    water = new Water( waterGeometry, {
-        color: params.color,
-        scale: params.scale,
-        flowDirection: new THREE.Vector2( params.flowX, params.flowY ),
-        textureWidth: 1024,
-        textureHeight: 1024
-    } );
+//     water = new Water( waterGeometry, {
+//         color: params.color,
+//         scale: params.scale,
+//         flowDirection: new THREE.Vector2( params.flowX, params.flowY ),
+//         textureWidth: 1024,
+//         textureHeight: 1024
+//     } );
 
-    water.position.set (-0.102, 0.855, 1.145);
-    water.rotation.x = Math.PI * - 0.5;
-    scene.add( water );
-}
+//     water.position.set (-0.102, 0.855, 1.145);
+//     water.rotation.x = Math.PI * - 0.5;
+//     scene.add( water );
+// }
 
 // function checkCatheterCollisionWithWater() {
 //     const catheter = kit.find(obj => obj.userData.path === "GLTF/catheterKit/10. Catheter.glb");
@@ -1574,20 +1574,16 @@ function onSelectEnd(event) {
         if (!scene.children.includes(fullDrape) && !scene.children.includes(fenestratedDrape)) {
             nextActive = true;
         }
-    } else if (instructionNumber === 4) { // step 3
+    }  else if (instructionNumber === 4) { // step 3
         const lubricant = kit.find(obj => obj.userData.path === "GLTF/catheterKit/4. Lubricant.glb");
         const lubricantBox = new THREE.Box3().setFromObject(lubricant);
         const catheter = kit.find(obj => obj.userData.path === "GLTF/catheterKit/10. Catheter.glb");
         const catheterBox = new THREE.Box3().setFromObject(catheter);
         if (!lubricated){
-            
             if (lubricantBox.intersectsBox(kitboundingBox) && catheterBox.intersectsBox(kitboundingBox)) {
                 animateLubricant();
-                if (!water){
-                    lubricantVisible();
-                    lubricated = true;
-                    nextActive = true;  
-                }
+                lubricated = true;
+                nextActive = true;  
             } 
      }
     } else if (instructionNumber === 5){ //step 4
