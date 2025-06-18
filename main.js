@@ -103,7 +103,7 @@ const kitBoundingGeometry = new THREE.BoxGeometry(1, 0.3, 1);
 const kitBoundingMaterial = new THREE.MeshBasicMaterial({ color: 0x0000ff, wireframe: true }); 
 const kitBounding = new THREE.Mesh(kitBoundingGeometry, kitBoundingMaterial);
 kitBounding.position.set( 0, 1.1, 1.13 );
-kitBounding.visible = true;
+kitBounding.visible = false;
 scene.add(kitBounding);
 
 const kitboundingBox = new THREE.Box3().setFromObject(kitBounding);
