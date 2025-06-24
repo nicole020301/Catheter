@@ -1714,7 +1714,7 @@ const clock = new THREE.Clock();
 
 // Animation loop
 function animate() {
-    requestAnimationFrame(animate);
+    // requestAnimationFrame(animate);
 
     const delta = clock.getDelta();
     if (mixer) mixer.update(delta);
@@ -1747,7 +1747,7 @@ function animate() {
     // Render for VR or regular
     if (renderer.xr.isPresenting) {
         renderer.render(scene, renderer.xr.getCamera(camera));
-        requestAnimationFrame(animate);
+        // requestAnimationFrame(animate);
 
         if (instructionNumber === 3) {
             checkSwabsCollision();
