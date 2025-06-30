@@ -988,13 +988,17 @@ function loadKit(){
     ];
     
     
-    catheterKit.forEach(({ path }) => {
+     catheterKit.forEach(({ path }) => {
         loader.load(
             path,
             (gltf) => {
                 const newObject = gltf.scene;
                 newObject.position.x += offsetValue;
                 newObject.userData.path = path;
+                
+                // Set layer 0 for all kit objects and their children (grabbable)
+                newObject.traverse(child => child.layers.set(0));
+                
                 if (path != "GLTF/catheterKit/2. Empty Pack.glb"){
                     kit.push(newObject);
                 }
@@ -1451,11 +1455,24 @@ function onSelectStart(event) {
     const intersections = getIntersections(controller);
     if (intersections.length > 0) {
         const object = intersections[0].object;
-        const parentObject = object.parent || object;
+        
+        // Find the top-level parent object that's in the kit or catheterModel
+        let parentObject = object;
+        while (parentObject.parent && 
+               !kit.includes(parentObject) && 
+               parentObject !== catheterModel &&
+               parentObject.parent !== scene) {
+            parentObject = parentObject.parent;
+        }
+        
+        // If we still haven't found a valid parent, use the immediate parent or the object itself
+        if (!kit.includes(parentObject) && parentObject !== catheterModel) {
+            parentObject = object.parent || object;
+        }
+        
         controller.attach(parentObject);
         grabbedObjects.set(controller, parentObject);
 
-        
 
         if (instructionNumber === 1) {
             const sterileGloves = kit.find(obj => obj.userData.path === "GLTF/catheterKit/11. Sterile Gloves_Closed.glb");
