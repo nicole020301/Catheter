@@ -1,4 +1,3 @@
-
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { XRButton } from 'three/examples/jsm/webxr/XRButton.js';
@@ -44,13 +43,41 @@ const directionalLight = new THREE.DirectionalLight(0xffffff, 2);
 directionalLight.position.set(0, 5, 0.5);
 scene.add(directionalLight);
 
-// Create a bounding box for deployment area
-const deploymentBoxGeometry = new THREE.BoxGeometry(0.5, 0.5, 0.5);
-const deploymentBoxMaterial = new THREE.MeshBasicMaterial({ color: 0x00ff00, wireframe: true });
-const deploymentBox = new THREE.Mesh(deploymentBoxGeometry, deploymentBoxMaterial);
-deploymentBox.position.set(1.25, 1, 0.25);
-scene.add(deploymentBox);
-deploymentBox.visible = false;
+// Create separate bounding boxes for drape deployment areas
+const fullDrapeDeploymentBoxGeometry = new THREE.BoxGeometry(0.4, 0.3, 0.6);
+const fullDrapeDeploymentBoxMaterial = new THREE.MeshBasicMaterial({ color: 0x00ff00, wireframe: true });
+const fullDrapeDeploymentBox = new THREE.Mesh(fullDrapeDeploymentBoxGeometry, fullDrapeDeploymentBoxMaterial);
+fullDrapeDeploymentBox.position.set(1.25, 0.85, 0.15); // Under patient (lower)
+scene.add(fullDrapeDeploymentBox);
+fullDrapeDeploymentBox.visible = false;
+
+const fenestratedDrapeDeploymentBoxGeometry = new THREE.BoxGeometry(0.4, 0.3, 0.4);
+const fenestratedDrapeDeploymentBoxMaterial = new THREE.MeshBasicMaterial({ color: 0x0000ff, wireframe: true });
+const fenestratedDrapeDeploymentBox = new THREE.Mesh(fenestratedDrapeDeploymentBoxGeometry, fenestratedDrapeDeploymentBoxMaterial);
+fenestratedDrapeDeploymentBox.position.set(1.25, 1.15, 0.25); // Over patient (higher)
+scene.add(fenestratedDrapeDeploymentBox);
+fenestratedDrapeDeploymentBox.visible = false;
+
+// Keep the original deployment box for backward compatibility (will use full drape zone)
+const deploymentBox = fullDrapeDeploymentBox;
+
+// Debug function to toggle deployment box visibility (for development use only)
+function toggleDeploymentBoxVisibility() {
+    fullDrapeDeploymentBox.visible = !fullDrapeDeploymentBox.visible;
+    fenestratedDrapeDeploymentBox.visible = !fenestratedDrapeDeploymentBox.visible;
+    console.log("Debug: Deployment boxes visibility:", fullDrapeDeploymentBox.visible);
+}
+
+// Keep deployment boxes hidden during normal gameplay
+function showDeploymentBoxForDebugging() {
+    // Boxes remain hidden for clean gameplay experience
+    // Uncomment lines below if debugging is needed:
+    // if (instructionNumber === 2) {
+    //     fullDrapeDeploymentBox.visible = true;
+    //     fenestratedDrapeDeploymentBox.visible = true;
+    //     console.log("🟢 Deployment boxes made visible for debugging");
+    // }
+}
 
 
 const offsetValue = 1.25
@@ -96,7 +123,27 @@ let message = "";
 let isError = false;
 let lubricated = false;
 let videoEnd = false;
+let unwrapContainer = null; // Store the unwrap button UI container
 const instructionsLength = Object.keys(instructions).length; // determine the number of instructions
+
+// Arrow indicator system for pointing to tools
+let arrowIndicators = []; // Store all arrow indicators
+let toolArrowMap = new Map(); // Map tools to their arrows
+
+// Define which tools are needed for each instruction step
+const stepRequiredTools = {
+    '0': [], // Unwrap button (special case)
+    '1': ['GLTF/catheterKit/11. Sterile Gloves_Closed.glb'], // Sterile gloves
+    '2': ['GLTF/catheterKit/12. Full Drape.glb', 'GLTF/catheterKit/13. Fenestrated Drape.glb'], // Drapes
+    '3': ['GLTF/catheterKit/5. Swabsticks1.glb', 'GLTF/catheterKit/6. Swabsticks2.glb', 'GLTF/catheterKit/7. Swabsticks3.glb'], // Swabsticks
+    '4': ['GLTF/catheterKit/4. Lubricant.glb'], // Lubricant
+    '5': ['GLTF/catheterKit/3. Saline Syringe.glb', 'GLTF/catheterKit/9. Urine Collection Bag.glb', 'GLTF/catheterKit/10. Catheter.glb'], // Syringe, urine bag, catheter
+    '6': ['combined_catheter'], // Special case for combined catheter
+    '7': [], // Inflate button (special case)
+    '8': [], // Inflate button (special case)
+    '9': ['deployed_drapes'], // Special case for deployed drapes
+    '10': [] // End
+};
 
 //create a bounding box for spawning the unwrap button
 const kitBoundingGeometry = new THREE.BoxGeometry(1, 0.3, 1);  
@@ -459,6 +506,12 @@ function makeTextPanel(instructionNumber) {
 
     // Play the corresponding audio file
     playVO(instructionNumber + 1);
+    
+    // Show deployment box for debugging during step 2
+    showDeploymentBoxForDebugging();
+    
+    // Show arrows for the current step
+    showArrowsForStep(instructionNumber);
 }
 
 function playVO(instructionNumber) {
@@ -488,6 +541,189 @@ function playVO(instructionNumber) {
     window.currentAudio = audio;
 }
 
+// Arrow Indicator Functions
+function createArrowIndicator() {
+    // Create a more stylized arrow shape like the reference image
+    const arrowGroup = new THREE.Group();
+    
+    // Create arrow head (larger triangular part)
+    const headGeometry = new THREE.ConeGeometry(0.008, 0.02, 6); // Much smaller
+    const arrowMaterial = new THREE.MeshLambertMaterial({ 
+        color: 0x030081, // New color as requested (#030081)
+        transparent: true, 
+        opacity: 0.95,
+        emissive: 0x030081 // Subtle glow with same color
+    });
+    const arrowHead = new THREE.Mesh(headGeometry, arrowMaterial);
+    arrowHead.rotation.z = Math.PI; // Point down
+    arrowHead.position.y = 0.01; // Position at bottom
+    
+    // Create arrow shaft (rectangular body)
+    const shaftGeometry = new THREE.BoxGeometry(0.004, 0.025, 0.004); // Much smaller shaft
+    const shaftMaterial = new THREE.MeshLambertMaterial({ 
+        color: 0x030081, // New color as requested (#030081)
+        transparent: true, 
+        opacity: 0.95,
+        emissive: 0x030081 // Subtle glow with same color
+    });
+    const shaft = new THREE.Mesh(shaftGeometry, shaftMaterial);
+    shaft.position.y = 0.03; // Position above the head
+    
+    // Add both parts to the group
+    arrowGroup.add(arrowHead);
+    arrowGroup.add(shaft);
+    
+    // Add some initial animation properties
+    arrowGroup.userData.originalY = 0;
+    arrowGroup.userData.animationOffset = Math.random() * Math.PI * 2; // Random offset for animation
+    
+    return arrowGroup;
+}
+
+function positionArrowAboveTool(arrow, tool) {
+    const toolBox = new THREE.Box3().setFromObject(tool);
+    const center = toolBox.getCenter(new THREE.Vector3());
+    const size = toolBox.getSize(new THREE.Vector3());
+    
+    // Position arrow above the tool (much closer since it's much smaller)
+    arrow.position.copy(center);
+    arrow.position.y = toolBox.max.y + 0.04; // 4cm above the tool (reduced from 8cm)
+    arrow.userData.originalY = arrow.position.y;
+}
+
+function showArrowsForStep(stepNumber) {
+    if (!arrowIndicators) {
+        arrowIndicators = [];
+        toolArrowMap = new Map();
+    }
+    
+    hideAllArrows(); // First hide all existing arrows
+    
+    // Handle special case for step 0 - unwrap button
+    if (stepNumber === 0 && unwrapContainer) {
+        const arrow = createArrowIndicator();
+        // Position arrow above the unwrap button
+        arrow.position.copy(unwrapContainer.position);
+        arrow.position.y += 0.04; // 4cm above (reduced for much smaller arrow)
+        arrow.userData.originalY = arrow.position.y;
+        scene.add(arrow);
+        arrowIndicators.push(arrow);
+        return;
+    }
+    
+    const requiredToolPaths = stepRequiredTools[stepNumber.toString()] || [];
+    
+    requiredToolPaths.forEach(toolPath => {
+        let targetTool = null;
+        
+        // Handle special cases
+        if (toolPath === 'combined_catheter' && currentCombinedCatheter && currentCombinedCatheter.visible) {
+            targetTool = currentCombinedCatheter;
+        } else if (toolPath === 'deployed_drapes') {
+            // Handle deployed drapes
+            const fullDrape = deployedInstruments.find(obj => obj.userData.path === "GLTF/deployed/FullDrape.glb");
+            const fenestratedDrape = deployedInstruments.find(obj => obj.userData.path === "GLTF/deployed/FenestratedDrape.glb");
+            
+            if (fullDrape && fullDrape.visible) {
+                const arrow = createArrowIndicator();
+                positionArrowAboveTool(arrow, fullDrape);
+                scene.add(arrow);
+                arrowIndicators.push(arrow);
+                toolArrowMap.set(fullDrape, arrow);
+            }
+            
+            if (fenestratedDrape && fenestratedDrape.visible) {
+                const arrow = createArrowIndicator();
+                positionArrowAboveTool(arrow, fenestratedDrape);
+                scene.add(arrow);
+                arrowIndicators.push(arrow);
+                toolArrowMap.set(fenestratedDrape, arrow);
+            }
+            return; // Skip the normal tool finding logic
+        } else {
+            // Find tool in kit array
+            targetTool = kit.find(obj => obj.userData.path === toolPath);
+        }
+        
+        if (targetTool && targetTool.visible) {
+            const arrow = createArrowIndicator();
+            positionArrowAboveTool(arrow, targetTool);
+            scene.add(arrow);
+            arrowIndicators.push(arrow);
+            toolArrowMap.set(targetTool, arrow);
+        }
+    });
+}
+
+function hideAllArrows() {
+    if (!arrowIndicators) return;
+    
+    arrowIndicators.forEach(arrow => {
+        scene.remove(arrow);
+        // Dispose of group children (geometries and materials)
+        arrow.traverse(child => {
+            if (child.geometry) child.geometry.dispose();
+            if (child.material) child.material.dispose();
+        });
+    });
+    arrowIndicators = [];
+    if (toolArrowMap) toolArrowMap.clear();
+}
+
+function hideArrowForTool(tool) {
+    if (!toolArrowMap || !arrowIndicators) return;
+    
+    // Find the top-level parent that might have an arrow
+    let parentTool = tool;
+    while (parentTool.parent && 
+           !toolArrowMap.has(parentTool) && 
+           parentTool.parent !== scene) {
+        parentTool = parentTool.parent;
+    }
+    
+    if (toolArrowMap.has(parentTool)) {
+        const arrow = toolArrowMap.get(parentTool);
+        scene.remove(arrow);
+        // Dispose of group children (geometries and materials)
+        arrow.traverse(child => {
+            if (child.geometry) child.geometry.dispose();
+            if (child.material) child.material.dispose();
+        });
+        
+        // Remove from arrays
+        const index = arrowIndicators.indexOf(arrow);
+        if (index > -1) {
+            arrowIndicators.splice(index, 1);
+        }
+        toolArrowMap.delete(parentTool);
+    }
+}
+
+function animateArrows() {
+    if (!arrowIndicators) return;
+    
+    const time = Date.now() * 0.004; // Animation speed
+    
+    arrowIndicators.forEach(arrow => {
+        if (arrow.userData && arrow.userData.originalY !== undefined) {
+            // Create bouncing animation with smaller movement for the compact arrow
+            const bounce = Math.sin(time + arrow.userData.animationOffset) * 0.015; // 1.5cm bounce (reduced)
+            arrow.position.y = arrow.userData.originalY + bounce;
+            
+            // Add slight rotation for more dynamic effect
+            arrow.rotation.y = Math.sin(time * 2 + arrow.userData.animationOffset) * 0.1;
+            
+            // Add pulsing opacity effect to all children in the group
+            const pulseOpacity = 0.8 + Math.sin(time * 3 + arrow.userData.animationOffset) * 0.2;
+            arrow.children.forEach(child => {
+                if (child.material) {
+                    child.material.opacity = pulseOpacity;
+                }
+            });
+        }
+    });
+}
+
 // FUNCTION TO TRIGGERED URINE BAG ANIMATION
 
 // function showUrineBagAnimation() {
@@ -505,7 +741,6 @@ function playVO(instructionNumber) {
 // let unwrapContainer = null; // Store the UI container
 let nextActive = false;
 let time = 0; // Track time for smooth animation
-let unwrapContainer = null;
 unwrapButton();
 // Function to create the unwrap button
 function unwrapButton() {
@@ -577,6 +812,10 @@ function unwrapButton() {
             if (foleyPack) {
                 scene.remove(foleyPack);
                 scene.remove(unwrapContainer);
+                
+                // Hide arrows when unwrap button is clicked
+                hideAllArrows();
+                
                 unwrapContainer = null;
                 envMaterials = envMaterials.filter(obj => obj !== foleyPack);
                 loadKit();
@@ -759,9 +998,11 @@ function raycast() {
 
 // Loaders
 const loader = new GLTFLoader();
-let catheterModel, kit = [], envMaterials = [], deployedInstruments = [];
-let urineBagModel, syringeModel;
+let kit = [], envMaterials = [], deployedInstruments = [];
 let water; //for lubricant
+let catheterWithSyringeModel = null; // Combined catheter + syringe
+let catheterWithSyringeAndBagModel = null; // Combined catheter + syringe + urine bag
+let currentCombinedCatheter = null; // Track which combined model is currently attached
 const dracoLoader = new DRACOLoader();
 dracoLoader.setDecoderPath('./draco/');
 loader.setDRACOLoader(dracoLoader);
@@ -769,6 +1010,7 @@ loader.setDRACOLoader(dracoLoader);
 
 let tipBox = null; 
 loadDeployed();
+loadCombinedCatheterModels();
 
 
 
@@ -813,6 +1055,80 @@ function loadDeployed(){
     });
 }
 
+// Load Combined Catheter Models for Step 5
+// Note: Using these GLB files:
+// 1. 'GLTF/deployed/Catheter_With_Syringe.glb' - Combined catheter + syringe model
+// 2. 'GLTF/deployed/Catheter_with_Syringe_and_Bag.glb' - Combined catheter + syringe + urine bag model
+function loadCombinedCatheterModels() {
+    console.log("Loading combined catheter models...");
+    
+    // Load catheter with syringe model
+    loader.load('GLTF/deployed/Catheter_With_Syringe.glb', (gltf) => {
+        // Extract the main mesh from the scene
+        catheterWithSyringeModel = gltf.scene;
+        catheterWithSyringeModel.userData.path = 'GLTF/deployed/Catheter_With_Syringe.glb';
+        catheterWithSyringeModel.visible = false; // Initially hidden
+        catheterWithSyringeModel.position.x += offsetValue; // Apply offset like other models
+        
+        // Set layer 0 for grabbing and ensure all children are also on layer 0
+        catheterWithSyringeModel.traverse(child => {
+            child.layers.set(0);
+            // Make sure materials are properly set up
+            if (child.isMesh) {
+                if (child.material) {
+                    if (Array.isArray(child.material)) {
+                        child.material.forEach(mat => {
+                            mat.needsUpdate = true;
+                        });
+                    } else {
+                        child.material.needsUpdate = true;
+                    }
+                }
+            }
+        });
+        
+        scene.add(catheterWithSyringeModel);
+        console.log("✅ Catheter with syringe model loaded successfully");
+    }, (progress) => {
+        console.log("Loading progress for Catheter_With_Syringe.glb:", progress);
+    }, (error) => {
+        console.error("❌ Error loading catheter with syringe model:", error);
+    });
+
+    // Load catheter with syringe and urine bag model
+    loader.load('GLTF/deployed/Catheter_with_Syringe_and_Bag.glb', (gltf) => {
+        // Extract the main mesh from the scene
+        catheterWithSyringeAndBagModel = gltf.scene;
+        catheterWithSyringeAndBagModel.userData.path = 'GLTF/deployed/Catheter_with_Syringe_and_Bag.glb';
+        catheterWithSyringeAndBagModel.visible = false; // Initially hidden
+        catheterWithSyringeAndBagModel.position.x += offsetValue; // Apply offset like other models
+        
+        // Set layer 0 for grabbing and ensure all children are also on layer 0
+        catheterWithSyringeAndBagModel.traverse(child => {
+            child.layers.set(0);
+            // Make sure materials are properly set up
+            if (child.isMesh) {
+                if (child.material) {
+                    if (Array.isArray(child.material)) {
+                        child.material.forEach(mat => {
+                            mat.needsUpdate = true;
+                        });
+                    } else {
+                        child.material.needsUpdate = true;
+                    }
+                }
+            }
+        });
+        
+        scene.add(catheterWithSyringeAndBagModel);
+        console.log("✅ Catheter with syringe and bag model loaded successfully");
+    }, (progress) => {
+        console.log("Loading progress for Catheter_with_Syringe_and_Bag.glb:", progress);
+    }, (error) => {
+        console.error("❌ Error loading catheter with syringe and bag model:", error);
+    });
+}
+
 
 // Load Catheter Model
 // // Create a bounding box for the detachment of syringe
@@ -824,60 +1140,7 @@ function loadDeployed(){
 // syringeDetachmentBox.position.set(offsetValue, 0.95, 0.5);
 // syringeDetachmentBox.visible = true;
 
-loader.load('GLTF/deployed/Catheter_on Table.glb', (gltf) => {
-    if (!catheterModel) {
-        catheterModel = gltf.scene;
-        catheterModel.position.x = offsetValue; 
-        scene.add(catheterModel);
-
-        // Set layer 0 for catheterModel and all children (grabbable)
-        catheterModel.traverse(child => child.layers.set(0));
-
-        const catheterMesh = catheterModel.children[0]; 
-
-        // Create and attach the catheter tip box (for collision)
-        const tipBoxGeometry = new THREE.BoxGeometry(0.01, 0.01, 0.01);  
-        const tipBoxMaterial = new THREE.MeshBasicMaterial({ color: 0x0000ff }); 
-        tipBox = new THREE.Mesh(tipBoxGeometry, tipBoxMaterial);
-
-        tipBox.position.set(-0.99, 0.825, 1.24); // Manually positioned
-        catheterModel.add(tipBox);
-        tipBox.visible = false;
-        catheterModel.visible = false;
-        
-        // syringeDetachmentBox.position.set(0, 0.95, 0.5);
-        
-        // catheterModel.add(syringeDetachmentBox);
-        // syringeDetachmentBox.visible = true; 
-
-        // Set layer 0 (so tipBox is also grabbable or interactable)
-        tipBox.layers.set(0);
-
-       
-
-        // --- Load and add Saline Syringe as child (non-grabbable) ---
-        loader.load('GLTF/deployed/Saline Syringe_on Table.glb', (syringeGltf) => {
-            syringeModel = syringeGltf.scene;
-            syringeModel.position.set(0, 0, 0);
-            syringeModel.userData.path = "GLTF/deployed/Saline Syringe_on Table.glb";
-            catheterModel.add(syringeModel);
-
-            // Set syringe layer to 1 (non-grabbable)
-            syringeModel.traverse(child => child.layers.set(1));
-        });
-
-        // --- Load and add Urine Collection Bag as child (non-grabbable) ---
-        loader.load('GLTF/deployed/Urine Collection Bag_on Table.glb', (urineGltf) => {
-            urineBagModel = urineGltf.scene;
-            urineBagModel.position.set(0, 0, 0);
-            urineBagModel.visible = false;
-            catheterModel.add(urineBagModel);
-
-            // Set urine bag layer to 1 (non-grabbable)
-            urineBagModel.traverse(child => child.layers.set(1));
-        });
-    }
-});
+// OLD CATHETER MODEL LOADING REMOVED - Now using individual kit components + combined models
 
 
 
@@ -987,6 +1250,8 @@ function loadKit(){
         { path: "GLTF/catheterKit/13. Fenestrated Drape.glb" }
     ];
     
+    let loadedCount = 0;
+    const totalItems = catheterKit.length;
     
     catheterKit.forEach(({ path }) => {
         loader.load(
@@ -995,10 +1260,22 @@ function loadKit(){
                 const newObject = gltf.scene;
                 newObject.position.x += offsetValue;
                 newObject.userData.path = path;
+                
+                // Set layer 0 for all kit objects and their children (grabbable)
+                newObject.traverse(child => child.layers.set(0));
+                
                 if (path != "GLTF/catheterKit/2. Empty Pack.glb"){
                     kit.push(newObject);
                 }
                 scene.add(newObject);
+                
+                loadedCount++;
+                // When all kit items are loaded, show arrows for current step
+                if (loadedCount === totalItems) {
+                    setTimeout(() => {
+                        showArrowsForStep(instructionNumber);
+                    }, 100); // Small delay to ensure everything is ready
+                }
             },
             undefined,
             (error) => console.error(`Error loading ${path}`, error)
@@ -1140,95 +1417,308 @@ function animateLubricant() {
 
 
 function checkCatheterCollisionWithSyringe() {
-    // if (!catheterModel) return false
     const catheter = kit.find(obj => obj.userData.path === "GLTF/catheterKit/10. Catheter.glb");
     const syringe = kit.find(obj => obj.userData.path === "GLTF/catheterKit/3. Saline Syringe.glb");
 
-    if (!syringe) {
-        console.error("Saline Syringe not found in kit");
+    if (!catheter || !syringe) {
+        // Don't spam console with missing object messages
+        return false;
+    }
+
+    // Only check collision if both objects are visible
+    if (!catheter.visible || !syringe.visible) {
         return false;
     }
 
     // Create bounding boxes for both the catheter and syringe
     const catheterBox = new THREE.Box3().setFromObject(catheter);
     const syringeBox = new THREE.Box3().setFromObject(syringe);
+    
+    // Expand the collision boxes slightly to make attachment easier
+    catheterBox.expandByScalar(0.02);
+    syringeBox.expandByScalar(0.02);
 
-    if (catheterBox.intersectsBox(syringeBox)) {
-        console.log("Catheter and syringe are colliding!");
-    } else {
-        console.log("Catheter and syringe are not colliding.");
+    const isColliding = catheterBox.intersectsBox(syringeBox);
+    
+    if (isColliding) {
+        console.log("Catheter and syringe are colliding! Calling attachSyringeToCatheter...");
     }
 
-    // Check if the bounding boxes intersect
-    return catheterBox.intersectsBox(syringeBox);
-    // const catheter = kit.find(obj => obj.userData.path === "GLTF/catheterKit/10. Catheter.glb");
-    // const syringe = kit.find(obj => obj.userData.path === "GLTF/catheterKit/3. Saline Syringe.glb");
-
-    // if (!catheter || !syringe) {
-    //     console.error("Catheter or syringe not found in kit");
-    //     return false;
-    // }
-
-    // // Create bounding boxes for catheter, syringe, and attachmentBox
-    // const catheterBox = new THREE.Box3().setFromObject(catheter);
-    // const syringeBox = new THREE.Box3().setFromObject(syringe);
-    // const attachmentBoxBounds = new THREE.Box3().setFromObject(attachmentBox);
-
-    // // Check if both catheter and syringe intersect with the attachmentBox
-    // const catheterCollides = catheterBox.intersectsBox(attachmentBoxBounds);
-    // const syringeCollides = syringeBox.intersectsBox(attachmentBoxBounds);
-
-    // if (catheterCollides && syringeCollides) {
-    //     console.log("Both catheter and syringe are colliding with the attachment box");
-    //     return true;
-    // }
-    // console.log("Catheter and syringe are not colliding with the attachment box");
-    // return false;
+    return isColliding;
 }
 function checkCatheterCollisionWithUrineBag() {
     const urineBag = kit.find(obj => obj.userData.path === "GLTF/catheterKit/9. Urine Collection Bag.glb");
-    if (!urineBag || !catheterModel) return false;
+    
+    // Check collision with the current combined catheter (should be catheter+syringe at this point)
+    if (!urineBag || !currentCombinedCatheter || !currentCombinedCatheter.visible) {
+        return false;
+    }
 
-    // Create bounding boxes for both the urine bag and catheter model
+    // Create bounding boxes for both the urine bag and current combined catheter
     const urineBagBox = new THREE.Box3().setFromObject(urineBag);
-    const catheterBox = new THREE.Box3().setFromObject(catheterModel);
+    const combinedCatheterBox = new THREE.Box3().setFromObject(currentCombinedCatheter);
+
+    // Expand the collision boxes slightly to make attachment easier
+    urineBagBox.expandByScalar(0.02);
+    combinedCatheterBox.expandByScalar(0.02);
 
     // Check if the bounding boxes intersect
-    return urineBagBox.intersectsBox(catheterBox);
-
+    const isColliding = urineBagBox.intersectsBox(combinedCatheterBox);
+    
+    if (isColliding) {
+        console.log("Urine bag and combined catheter are colliding!");
+    }
+    
+    return isColliding;
 }
 function attachSyringeToCatheter() {
+    console.log("=== REPLACING CATHETER + SYRINGE ===");
+    
     const syringe = kit.find(obj => obj.userData.path === "GLTF/catheterKit/3. Saline Syringe.glb");
     const catheter = kit.find(obj => obj.userData.path === "GLTF/catheterKit/10. Catheter.glb");
-    if (!syringe || !catheter) {
-        console.error("Syringe or catheter model not found");
+    
+    console.log("Found syringe:", !!syringe);
+    console.log("Found catheter:", !!catheter);
+    console.log("Found catheterWithSyringeModel:", !!catheterWithSyringeModel);
+    
+    if (!syringe || !catheter || !catheterWithSyringeModel) {
+        console.error("Missing objects - Syringe:", !!syringe, "Catheter:", !!catheter, "Combined model:", !!catheterWithSyringeModel);
         return;
     }
-    catheter.visible = false; // Hide the catheter model
-    syringe.visible = false; // Hide the syringe model
-    catheterModel.visible = true; 
     
+    // Find which controller is holding either object
+    let activeController = null;
+    let detachmentActions = [];
+    
+    grabbedObjects.forEach((object, controller) => {
+        if (object === catheter) {
+            activeController = controller;
+            detachmentActions.push(() => {
+                console.log("Detaching catheter from controller");
+                scene.attach(catheter);
+                grabbedObjects.delete(controller);
+            });
+        }
+        if (object === syringe) {
+            if (!activeController) activeController = controller; // Use syringe controller if no catheter controller
+            detachmentActions.push(() => {
+                console.log("Detaching syringe from controller");
+                scene.attach(syringe);
+                grabbedObjects.delete(controller);
+            });
+        }
+    });
+    
+    // Execute all detachments
+    detachmentActions.forEach(action => action());
+    
+    // Hide/remove the original objects
+    catheter.visible = false;
+    syringe.visible = false;
+    console.log("Hidden original catheter and syringe");
+    
+    // Position the combined model at the catheter's position
+    if (catheter.parent) {
+        const catheterWorldPos = new THREE.Vector3();
+        const catheterWorldQuat = new THREE.Quaternion();
+        catheter.getWorldPosition(catheterWorldPos);
+        catheter.getWorldQuaternion(catheterWorldQuat);
+        
+        catheterWithSyringeModel.position.copy(catheterWorldPos);
+        catheterWithSyringeModel.quaternion.copy(catheterWorldQuat);
+    }
+    
+    // Show the combined model
+    catheterWithSyringeModel.visible = true;
+    currentCombinedCatheter = catheterWithSyringeModel;
+    console.log("Made combined catheter+syringe visible");
+    
+    // Attach combined model to the active controller
+    if (activeController) {
+        // Store the desired world transform before attachment
+        const targetWorldPos = new THREE.Vector3();
+        const targetWorldQuat = new THREE.Quaternion();
+        catheterWithSyringeModel.getWorldPosition(targetWorldPos);
+        catheterWithSyringeModel.getWorldQuaternion(targetWorldQuat);
+        
+        // Attach to controller first (this will change the coordinate system)
+        activeController.attach(catheterWithSyringeModel);
+        
+        // Calculate the local transform needed to achieve the target world transform
+        const controllerWorldMatrix = new THREE.Matrix4();
+        controllerWorldMatrix.copy(activeController.matrixWorld);
+        
+        // Get the inverse of the controller's world matrix
+        const controllerInverseMatrix = new THREE.Matrix4();
+        controllerInverseMatrix.copy(controllerWorldMatrix).invert();
+        
+        // Create a matrix for the target world transform
+        const targetWorldMatrix = new THREE.Matrix4();
+        targetWorldMatrix.compose(targetWorldPos, targetWorldQuat, new THREE.Vector3(1, 1, 1));
+        
+        // Calculate the local matrix relative to the controller
+        const localMatrix = new THREE.Matrix4();
+        localMatrix.multiplyMatrices(controllerInverseMatrix, targetWorldMatrix);
+        
+        // Extract position, rotation, and scale from the local matrix
+        const localPos = new THREE.Vector3();
+        const localQuat = new THREE.Quaternion();
+        const localScale = new THREE.Vector3();
+        localMatrix.decompose(localPos, localQuat, localScale);
+        
+        // Apply the calculated local transform
+        catheterWithSyringeModel.position.copy(localPos);
+        catheterWithSyringeModel.quaternion.copy(localQuat);
+        catheterWithSyringeModel.scale.copy(localScale);
+        
+        // Apply additional offset for better ergonomics (in local space)
+        catheterWithSyringeModel.position.x += 0.25; // Reduced offset for better positioning
+        catheterWithSyringeModel.position.y -= 0.21;
+        
+        grabbedObjects.set(activeController, catheterWithSyringeModel);
+        
+        console.log("✅ Combined catheter+syringe attached to controller with proper rotation");
+        outputPanel("Catheter and syringe combined!", false);
+    } else {
+        // If no controller was holding either, just position it at the catheter's location
+        scene.attach(catheterWithSyringeModel);
+        console.log("No controller found, positioned combined catheter at original location");
+        outputPanel("Catheter and syringe combined!", false);
+    }
+    
+    // Hide arrows for the individual components
+    hideArrowForTool(catheter);
+    hideArrowForTool(syringe);
 }
 function attachUrineBagToCatheter() {
+    console.log("=== REPLACING CATHETER+SYRINGE + URINE BAG ===");
+    
     const urineBag = kit.find(obj => obj.userData.path === "GLTF/catheterKit/9. Urine Collection Bag.glb");
     
-    if (!urineBag || !catheterModel) {
-        console.error("Urine bag or catheter model not found");
+    console.log("Found urine bag:", !!urineBag);
+    console.log("Found catheterWithSyringeAndBagModel:", !!catheterWithSyringeAndBagModel);
+    console.log("Current combined catheter:", !!currentCombinedCatheter);
+    
+    if (!urineBag || !catheterWithSyringeAndBagModel || !currentCombinedCatheter) {
+        console.error("Missing objects - Urine bag:", !!urineBag, "Full combined model:", !!catheterWithSyringeAndBagModel, "Current combined:", !!currentCombinedCatheter);
         return;
     }
-    urineBag.visible = false; // Hide the urine bag model
-    urineBagModel.visible = true;
+    
+    // Find which controller is holding either object
+    let activeController = null;
+    let detachmentActions = [];
+    
+    grabbedObjects.forEach((object, controller) => {
+        if (object === currentCombinedCatheter) {
+            activeController = controller;
+            detachmentActions.push(() => {
+                console.log("Detaching combined catheter+syringe from controller");
+                scene.attach(currentCombinedCatheter);
+                grabbedObjects.delete(controller);
+            });
+        }
+        if (object === urineBag) {
+            if (!activeController) activeController = controller; // Use urine bag controller if no combined controller
+            detachmentActions.push(() => {
+                console.log("Detaching urine bag from controller");
+                scene.attach(urineBag);
+                grabbedObjects.delete(controller);
+            });
+        }
+    });
+    
+    // Execute all detachments
+    detachmentActions.forEach(action => action());
+    
+    // Store the position and rotation of the current combined model
+    const currentPos = new THREE.Vector3();
+    const currentQuat = new THREE.Quaternion();
+    
+    if (currentCombinedCatheter) {
+        currentCombinedCatheter.getWorldPosition(currentPos);
+        currentCombinedCatheter.getWorldQuaternion(currentQuat);
+        currentCombinedCatheter.visible = false;
+    }
+    
+    urineBag.visible = false;
+    console.log("Hidden previous combined catheter and urine bag");
+    
+    // Apply the position and rotation to the new combined model
+    catheterWithSyringeAndBagModel.position.copy(currentPos);
+    catheterWithSyringeAndBagModel.quaternion.copy(currentQuat);
+    
+    // Show the fully combined model
+    catheterWithSyringeAndBagModel.visible = true;
+    currentCombinedCatheter = catheterWithSyringeAndBagModel;
+    console.log("Made combined catheter+syringe+bag visible");
+    
+    // Attach fully combined model to the active controller
+    if (activeController) {
+        // Store the desired world transform before attachment
+        const targetWorldPos = new THREE.Vector3();
+        const targetWorldQuat = new THREE.Quaternion();
+        catheterWithSyringeAndBagModel.getWorldPosition(targetWorldPos);
+        catheterWithSyringeAndBagModel.getWorldQuaternion(targetWorldQuat);
+        
+        // Attach to controller first (this will change the coordinate system)
+        activeController.attach(catheterWithSyringeAndBagModel);
+        
+        // Calculate the local transform needed to achieve the target world transform
+        const controllerWorldMatrix = new THREE.Matrix4();
+        controllerWorldMatrix.copy(activeController.matrixWorld);
+        
+        // Get the inverse of the controller's world matrix
+        const controllerInverseMatrix = new THREE.Matrix4();
+        controllerInverseMatrix.copy(controllerWorldMatrix).invert();
+        
+        // Create a matrix for the target world transform
+        const targetWorldMatrix = new THREE.Matrix4();
+        targetWorldMatrix.compose(targetWorldPos, targetWorldQuat, new THREE.Vector3(1, 1, 1));
+        
+        // Calculate the local matrix relative to the controller
+        const localMatrix = new THREE.Matrix4();
+        localMatrix.multiplyMatrices(controllerInverseMatrix, targetWorldMatrix);
+        
+        // Extract position, rotation, and scale from the local matrix
+        const localPos = new THREE.Vector3();
+        const localQuat = new THREE.Quaternion();
+        const localScale = new THREE.Vector3();
+        localMatrix.decompose(localPos, localQuat, localScale);
+        
+        // Apply the calculated local transform
+        catheterWithSyringeAndBagModel.position.copy(localPos);
+        catheterWithSyringeAndBagModel.quaternion.copy(localQuat);
+        catheterWithSyringeAndBagModel.scale.copy(localScale);
+        
+        // Apply additional offset for better ergonomics (in local space)
+        catheterWithSyringeAndBagModel.position.x += 0.02; // Consistent offset
+        catheterWithSyringeAndBagModel.position.y -= 0.05;
+        
+        grabbedObjects.set(activeController, catheterWithSyringeAndBagModel);
+        
+        console.log("✅ Combined catheter+syringe+bag attached to controller with proper rotation");
+        outputPanel("Urine bag attached! Ready to insert.", false);
+    } else {
+        // If no controller was holding either, position it appropriately
+        scene.attach(catheterWithSyringeAndBagModel);
+        console.log("No controller found, positioned combined catheter+syringe+bag at original location");
+        outputPanel("Urine bag attached! Ready to insert.", false);
+    }
+    
+    // Hide arrows for the individual components
+    hideArrowForTool(urineBag);
+    if (currentCombinedCatheter) hideArrowForTool(currentCombinedCatheter);
 }
-// Function to check if the tipBox intersects with insertionBox instead of pelvicObject
+// Function to check if the combined catheter intersects with insertionBox
 function checkCollisionWithInsertionBox() {
-    if (!tipBox || !insertionBox) return;
+    if (!currentCombinedCatheter || !insertionBox || !currentCombinedCatheter.visible) return false;
 
-    // Create bounding boxes for both the tipBox and insertionBox
-    const tipBoxBounds = new THREE.Box3().setFromObject(tipBox);
+    // Create bounding boxes for both the combined catheter and insertionBox
+    const combinedCatheterBounds = new THREE.Box3().setFromObject(currentCombinedCatheter);
     const insertionBoxBounds = new THREE.Box3().setFromObject(insertionBox);
 
     // Check if the bounding boxes intersect
-    return tipBoxBounds.intersectsBox(insertionBoxBounds);
+    return combinedCatheterBounds.intersectsBox(insertionBoxBounds);
 }
 
 // Create a bounding box for swabs collision
@@ -1297,6 +1787,12 @@ let fulldrapeDisposed = false;
 let fenestratedDrapeDisposed = false;
 let swab1Disposed = false, swab2Disposed = false, swab3Disposed = false;
 let glovesDisposed = false, lubricantDisposed = false;
+
+// Drape deployment feedback states
+let fullDrapeInZone = false;
+let fenestratedDrapeInZone = false;
+let fullDrapeOriginalMaterials = null;
+let fenestratedDrapeOriginalMaterials = null;
 // 
 function checkDrapesCollisionWithTrashcan() {
     const deployedFullDrape = deployedInstruments.find(obj => obj.userData.path === "GLTF/deployed/FullDrape.glb");
@@ -1323,6 +1819,10 @@ function checkDrapesCollisionWithTrashcan() {
             playSFX('public/sfx/trashcan_sfx.wav');
             deployedFullDrape.visible = false; // Hide the full drape
             scene.remove(deployedFullDrape);
+            
+            // Hide arrow for this drape
+            hideArrowForTool(deployedFullDrape);
+            
             fulldrapeDisposed = true;
         }
     }
@@ -1334,6 +1834,10 @@ function checkDrapesCollisionWithTrashcan() {
             deployedFenestratedDrape.visible = false; // Hide the fenestrated drape
             deployedFenestratedDrape.position.set(4,4,4);
             scene.remove(deployedFenestratedDrape);
+            
+            // Hide arrow for this drape
+            hideArrowForTool(deployedFenestratedDrape);
+            
             fenestratedDrapeDisposed = true;
         }
     }
@@ -1400,6 +1904,133 @@ function checkDrapesCollisionWithTrashcan() {
     return fullDrapeCollides || fenestratedDrapeCollides;
 }
 
+// Function to apply green glow effect to deployed drapes
+function applyGreenGlow(drapeObject) {
+    if (!drapeObject) return;
+    
+    drapeObject.traverse((child) => {
+        if (child.isMesh && child.material) {
+            // Store original materials if not already stored
+            if (!child.userData.originalMaterial) {
+                child.userData.originalMaterial = child.material.clone();
+            }
+            
+            // Create clean neon green material instead of trying to modify existing material
+            const neonGreenMaterial = new THREE.MeshBasicMaterial({
+                color: 0x00ff00,        // Pure neon green
+                transparent: true,
+                opacity: 0.8,           // Adjustable translucent effect
+                emissive: 0x004400,     // Slight emissive boost for extra pop
+                emissiveIntensity: 0.5
+            });
+            
+            child.material = neonGreenMaterial;
+        }
+    });
+}
+
+// Function to remove green glow effect from deployed drapes
+function removeGreenGlow(drapeObject) {
+    if (!drapeObject) return;
+    
+    drapeObject.traverse((child) => {
+        if (child.isMesh && child.userData.originalMaterial) {
+            child.material = child.userData.originalMaterial;
+        }
+    });
+}
+
+// Function to check drape collision while being dragged
+function checkDrapeCollisionWhileDragging() {
+    if (instructionNumber !== 2) return;
+    
+    const fullDrape = kit.find(obj => obj.userData.path === "GLTF/catheterKit/12. Full Drape.glb");
+    const deployedFullDrape = deployedInstruments.find(obj => obj.userData.path === "GLTF/deployed/FullDrape.glb");
+    const fenestratedDrape = kit.find(obj => obj.userData.path === "GLTF/catheterKit/13. Fenestrated Drape.glb");
+    const deployedFenestratedDrape = deployedInstruments.find(obj => obj.userData.path === "GLTF/deployed/FenestratedDrape.glb");
+    
+    // Only require deployed versions to exist (original drapes may be undefined if already deployed)
+    if (!deployedFullDrape || !deployedFenestratedDrape) {
+        console.log("Missing deployed objects - Deployed full drape:", !!deployedFullDrape, "Deployed fenestrated drape:", !!deployedFenestratedDrape);
+        return;
+    }
+    
+    // Optional debug logging (commented out for clean gameplay)
+    // if (!window.drapeStateLastLogTime) window.drapeStateLastLogTime = 0;
+    // const now = Date.now();
+    // if (now - window.drapeStateLastLogTime > 3000) {
+    //     console.log("🔍 Drape states - Full drape exists:", !!fullDrape, "Fenestrated drape exists:", !!fenestratedDrape);
+    //     window.drapeStateLastLogTime = now;
+    // }
+    
+    // Use separate deployment zones for each drape
+    const fullDrapeZoneBounds = new THREE.Box3().setFromObject(fullDrapeDeploymentBox);
+    const fenestratedDrapeZoneBounds = new THREE.Box3().setFromObject(fenestratedDrapeDeploymentBox);
+    
+    // Check if full drape is being grabbed and is in ITS SPECIFIC deployment zone
+    const fullDrapeGrabbed = fullDrape ? Array.from(grabbedObjects.values()).includes(fullDrape) : false;
+    
+    if (fullDrape && fullDrapeGrabbed && fullDrape.visible) {
+        const fullDrapeBox = new THREE.Box3().setFromObject(fullDrape);
+        const fullDrapeInZoneNow = fullDrapeBox.intersectsBox(fullDrapeZoneBounds);
+        
+        // Optional debug logging (commented out for clean gameplay)
+        // if (!window.fullDrapeLastLogTime) window.fullDrapeLastLogTime = 0;
+        // const now = Date.now();
+        // if (now - window.fullDrapeLastLogTime > 1500) {
+        //     console.log("🔍 Full drape debug - Box min:", fullDrapeBox.min, "max:", fullDrapeBox.max);
+        //     console.log("🔍 Full drape zone - Box min:", fullDrapeZoneBounds.min, "max:", fullDrapeZoneBounds.max);
+        //     console.log("🔍 Full drape collision result:", fullDrapeInZoneNow);
+        //     window.fullDrapeLastLogTime = now;
+        // }
+        
+        if (fullDrapeInZoneNow && !fullDrapeInZone) {
+            // Entered zone - show green glow
+            fullDrapeInZone = true;
+            deployedFullDrape.visible = true;
+            applyGreenGlow(deployedFullDrape);
+            console.log("✅ Full drape entered ITS deployment zone (under patient) - showing green glow");
+        } else if (!fullDrapeInZoneNow && fullDrapeInZone) {
+            // Left zone - hide deployed drape
+            fullDrapeInZone = false;
+            deployedFullDrape.visible = false;
+            removeGreenGlow(deployedFullDrape);
+            console.log("❌ Full drape left ITS deployment zone - hiding deployed drape");
+        }
+    }
+    
+    // Check if fenestrated drape is being grabbed and is in ITS SPECIFIC deployment zone
+    const fenestratedDrapeGrabbed = fenestratedDrape ? Array.from(grabbedObjects.values()).includes(fenestratedDrape) : false;
+    if (fenestratedDrape && fenestratedDrapeGrabbed && fenestratedDrape.visible) {
+        const fenestratedDrapeBox = new THREE.Box3().setFromObject(fenestratedDrape);
+        const fenestratedDrapeInZoneNow = fenestratedDrapeBox.intersectsBox(fenestratedDrapeZoneBounds);
+        
+        // Optional debug logging (commented out for clean gameplay)
+        // if (!window.fenestratedDrapeLastLogTime) window.fenestratedDrapeLastLogTime = 0;
+        // const now2 = Date.now();
+        // if (now2 - window.fenestratedDrapeLastLogTime > 1500) {
+        //     console.log("🔍 Fenestrated drape debug - Box min:", fenestratedDrapeBox.min, "max:", fenestratedDrapeBox.max);
+        //     console.log("🔍 Fenestrated drape zone - Box min:", fenestratedDrapeZoneBounds.min, "max:", fenestratedDrapeZoneBounds.max);
+        //     console.log("🔍 Fenestrated drape collision result:", fenestratedDrapeInZoneNow);
+        //     window.fenestratedDrapeLastLogTime = now2;
+        // }
+        
+        if (fenestratedDrapeInZoneNow && !fenestratedDrapeInZone) {
+            // Entered zone - show green glow
+            fenestratedDrapeInZone = true;
+            deployedFenestratedDrape.visible = true;
+            applyGreenGlow(deployedFenestratedDrape);
+            console.log("✅ Fenestrated drape entered ITS deployment zone (over patient) - showing green glow");
+        } else if (!fenestratedDrapeInZoneNow && fenestratedDrapeInZone) {
+            // Left zone - hide deployed drape
+            fenestratedDrapeInZone = false;
+            deployedFenestratedDrape.visible = false;
+            removeGreenGlow(deployedFenestratedDrape);
+            console.log("❌ Fenestrated drape left ITS deployment zone - hiding deployed drape");
+        }
+    }
+}
+
 // Hand Controllers
 const hand1 = renderer.xr.getHand(0);
 hand1.add(new OculusHandModel(hand1));
@@ -1451,11 +2082,35 @@ function onSelectStart(event) {
     const intersections = getIntersections(controller);
     if (intersections.length > 0) {
         const object = intersections[0].object;
-        const parentObject = object.parent || object;
+        
+        // Find the top-level parent object that's in the kit or combined catheter
+        let parentObject = object;
+        while (parentObject.parent && 
+               !kit.includes(parentObject) && 
+               parentObject !== currentCombinedCatheter &&
+               parentObject.parent !== scene) {
+            parentObject = parentObject.parent;
+        }
+        
+        // If we still haven't found a valid parent, use the immediate parent or the object itself
+        if (!kit.includes(parentObject) && parentObject !== currentCombinedCatheter) {
+            parentObject = object.parent || object;
+        }
+        
         controller.attach(parentObject);
         grabbedObjects.set(controller, parentObject);
 
-        
+        // Debug logging for drapes
+        if (instructionNumber === 2) {
+            if (parentObject.userData.path === "GLTF/catheterKit/12. Full Drape.glb") {
+                console.log("🟡 GRABBED: Full Drape");
+            } else if (parentObject.userData.path === "GLTF/catheterKit/13. Fenestrated Drape.glb") {
+                console.log("🟡 GRABBED: Fenestrated Drape");
+            }
+        }
+
+        // Hide arrow for this tool when grabbed
+        hideArrowForTool(parentObject);
 
         if (instructionNumber === 1) {
             const sterileGloves = kit.find(obj => obj.userData.path === "GLTF/catheterKit/11. Sterile Gloves_Closed.glb");
@@ -1493,8 +2148,8 @@ function onSelectStart(event) {
         //         removeSyringeFromCatheter();
         //     }
         // }
-        }
     }
+}
 
 // function onSelectStart(event) {
 //     // for ui
@@ -1545,10 +2200,61 @@ function onSelectEnd(event) {
     selectState = false;
     const controller = event.target;
 
+    let releasedObject = null;
     if (grabbedObjects.has(controller)) { // for grabbing functionality
-        const object = grabbedObjects.get(controller);
-        scene.attach(object); // Release the object from the controller
+        releasedObject = grabbedObjects.get(controller);
+        
+        // Debug logging for drapes
+        if (instructionNumber === 2 && releasedObject) {
+            if (releasedObject.userData.path === "GLTF/catheterKit/12. Full Drape.glb") {
+                console.log("🔴 RELEASED: Full Drape");
+            } else if (releasedObject.userData.path === "GLTF/catheterKit/13. Fenestrated Drape.glb") {
+                console.log("🔴 RELEASED: Fenestrated Drape");
+            }
+        }
+        
+        scene.attach(releasedObject); // Release the object from the controller
         grabbedObjects.delete(controller);
+    }
+    
+    // Handle drape state reset when released outside deployment zone
+    if (instructionNumber === 2 && releasedObject) {
+        const fullDrape = kit.find(obj => obj.userData.path === "GLTF/catheterKit/12. Full Drape.glb");
+        const deployedFullDrape = deployedInstruments.find(obj => obj.userData.path === "GLTF/deployed/FullDrape.glb");
+        const fenestratedDrape = kit.find(obj => obj.userData.path === "GLTF/catheterKit/13. Fenestrated Drape.glb");
+        const deployedFenestratedDrape = deployedInstruments.find(obj => obj.userData.path === "GLTF/deployed/FenestratedDrape.glb");
+        
+        // Reset full drape state if it was released outside its zone
+        if (fullDrape && releasedObject === fullDrape && fullDrapeInZone) {
+            const fullDrapeZoneBounds = new THREE.Box3().setFromObject(fullDrapeDeploymentBox);
+            const fullDrapeBox = new THREE.Box3().setFromObject(fullDrape);
+            
+            // Only reset if it's actually outside the zone
+            if (!fullDrapeBox.intersectsBox(fullDrapeZoneBounds)) {
+                fullDrapeInZone = false;
+                if (deployedFullDrape) {
+                    deployedFullDrape.visible = false;
+                    removeGreenGlow(deployedFullDrape);
+                    console.log("🔄 Full drape released outside zone - resetting state");
+                }
+            }
+        }
+        
+        // Reset fenestrated drape state if it was released outside its zone
+        if (fenestratedDrape && releasedObject === fenestratedDrape && fenestratedDrapeInZone) {
+            const fenestratedDrapeZoneBounds = new THREE.Box3().setFromObject(fenestratedDrapeDeploymentBox);
+            const fenestratedDrapeBox = new THREE.Box3().setFromObject(fenestratedDrape);
+            
+            // Only reset if it's actually outside the zone
+            if (!fenestratedDrapeBox.intersectsBox(fenestratedDrapeZoneBounds)) {
+                fenestratedDrapeInZone = false;
+                if (deployedFenestratedDrape) {
+                    deployedFenestratedDrape.visible = false;
+                    removeGreenGlow(deployedFenestratedDrape);
+                    console.log("🔄 Fenestrated drape released outside zone - resetting state");
+                }
+            }
+        }
     }
     
     // for putting on drapes
@@ -1557,22 +2263,57 @@ function onSelectEnd(event) {
         const deployedFullDrape = deployedInstruments.find(obj => obj.userData.path === "GLTF/deployed/FullDrape.glb");
         const fenestratedDrape = kit.find(obj => obj.userData.path === "GLTF/catheterKit/13. Fenestrated Drape.glb");
         const deployedFenestratedDrape = deployedInstruments.find(obj => obj.userData.path === "GLTF/deployed/FenestratedDrape.glb");
-        const fenestratedDrapeBox = new THREE.Box3().setFromObject(fenestratedDrape);
-        const fullDrapeBox = new THREE.Box3().setFromObject(fullDrape);
-        const deploymentBoxBounds = new THREE.Box3().setFromObject(deploymentBox);
+        
+        // Use separate deployment zones for each drape
+        const fullDrapeZoneBounds = new THREE.Box3().setFromObject(fullDrapeDeploymentBox);
+        const fenestratedDrapeZoneBounds = new THREE.Box3().setFromObject(fenestratedDrapeDeploymentBox);
+        
+        // Track which drapes got deployed this release
+        let fullDrapeDeployed = false;
+        let fenestratedDrapeDeployed = false;
             
-        if (fullDrapeBox.intersectsBox(deploymentBoxBounds)) {
-            scene.remove(fullDrape);
-            deployedFullDrape.visible = true;
-        } 
-        if (fenestratedDrapeBox.intersectsBox(deploymentBoxBounds)) {
-            scene.remove(fenestratedDrape);
-            deployedFenestratedDrape.visible = true;
+        if (fullDrape && fullDrape.visible) {
+            const fullDrapeBox = new THREE.Box3().setFromObject(fullDrape);
+            if (fullDrapeBox.intersectsBox(fullDrapeZoneBounds)) {
+                scene.remove(fullDrape);
+                kit = kit.filter(obj => obj !== fullDrape); // Remove from kit array
+                deployedFullDrape.visible = true;
+                removeGreenGlow(deployedFullDrape); // Remove green glow and show normal colors
+                fullDrapeInZone = false; // Reset state
+                fullDrapeDeployed = true;
+                console.log("✅ Full drape deployed successfully in ITS zone (under patient)");
+                
+                // Hide arrow for this drape
+                hideArrowForTool(fullDrape);
+            }
         }
         
-        // Check if both fullDrape and fenestratedDrape are removed from the scene
-        if (!scene.children.includes(fullDrape) && !scene.children.includes(fenestratedDrape)) {
+        if (fenestratedDrape && fenestratedDrape.visible) {
+            const fenestratedDrapeBox = new THREE.Box3().setFromObject(fenestratedDrape);
+            if (fenestratedDrapeBox.intersectsBox(fenestratedDrapeZoneBounds)) {
+                scene.remove(fenestratedDrape);
+                kit = kit.filter(obj => obj !== fenestratedDrape); // Remove from kit array
+                deployedFenestratedDrape.visible = true;
+                removeGreenGlow(deployedFenestratedDrape); // Remove green glow and show normal colors
+                fenestratedDrapeInZone = false; // Reset state
+                fenestratedDrapeDeployed = true;
+                console.log("✅ Fenestrated drape deployed successfully in ITS zone (over patient)");
+                
+                // Hide arrow for this drape
+                hideArrowForTool(fenestratedDrape);
+            }
+        }
+        
+        // Check if both drapes are deployed (don't exist in kit anymore)
+        const fullDrapeStillExists = kit.find(obj => obj.userData.path === "GLTF/catheterKit/12. Full Drape.glb");
+        const fenestratedDrapeStillExists = kit.find(obj => obj.userData.path === "GLTF/catheterKit/13. Fenestrated Drape.glb");
+        
+        if (!fullDrapeStillExists && !fenestratedDrapeStillExists) {
             nextActive = true;
+            // Hide deployment boxes when step is complete
+            fullDrapeDeploymentBox.visible = false;
+            fenestratedDrapeDeploymentBox.visible = false;
+            console.log("🎉 Both drapes deployed - ready for next step");
         }
     }  else if (instructionNumber === 4) { // step 3
         const lubricant = kit.find(obj => obj.userData.path === "GLTF/catheterKit/4. Lubricant.glb");
@@ -1586,13 +2327,29 @@ function onSelectEnd(event) {
                 nextActive = true;  
             } 
      }
-    } else if (instructionNumber === 5){ //step 4
-        if (checkCatheterCollisionWithSyringe()){
-            // nextActive = true;
+    } else if (instructionNumber === 5){ //step 5
+        console.log("Step 5: Checking collisions...");
+        
+        // First collision: Catheter + Syringe → Combined Catheter+Syringe
+        if (checkCatheterCollisionWithSyringe() && !currentCombinedCatheter){
+            console.log("Step 5: Catheter-syringe collision detected!");
             attachSyringeToCatheter();
-        } if (checkCatheterCollisionWithUrineBag()){
-            nextActive = true;
+            
+            // Play success sound effect
+            playSFX('public/sfx/attach_sound.wav');
+        } 
+        
+        // Second collision: Combined Catheter+Syringe + Urine Bag → Fully Combined
+        if (checkCatheterCollisionWithUrineBag() && currentCombinedCatheter === catheterWithSyringeModel){
+            console.log("Step 5: Catheter-urine bag collision detected!");
             attachUrineBagToCatheter();
+            nextActive = true;
+            
+            // Play success sound effect
+            playSFX('public/sfx/attach_sound.wav');
+            
+            // Show guidance message
+            outputPanel("Great! Now you can proceed to the next step.", false);
         }
         
     }
@@ -1609,8 +2366,22 @@ function onSelectEnd(event) {
                 message = "Great Job!";
                 sphereIndicator.visible = false;
                 outputPanel(message, isError);
-                catheterModel.visible = false; // Hide the catheter model
-                // catheterModel.position.set(offsetValue, 0, 0); //reset the position of catheter for syringe bounding box
+                
+                // Hide the combined catheter model and release it from controller
+                if (currentCombinedCatheter) {
+                    currentCombinedCatheter.visible = false;
+                    
+                    // Find which controller was holding the combined catheter and release it
+                    grabbedObjects.forEach((object, controller) => {
+                        if (object === currentCombinedCatheter) {
+                            scene.attach(object);
+                            grabbedObjects.delete(controller);
+                        }
+                    });
+                    
+                    // Hide arrow for the combined catheter when it's inserted
+                    hideArrowForTool(currentCombinedCatheter);
+                }
                 
                 loadInsertedCatheter(); //Deploying inserted Catheter
                 nextActive = true;
@@ -1683,7 +2454,7 @@ scene.add(controllerGrip2);
 // }
 
 function getIntersections(controller) {
-    if (!catheterModel && kit.length === 0) {
+    if (kit.length === 0 && !currentCombinedCatheter) {
         return [];
     }
 
@@ -1696,9 +2467,14 @@ function getIntersections(controller) {
     raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
     raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
 
-    const targets = instructionNumber === 9
-        ? [catheterModel, ...kit, ...deployedInstruments]
-        : [catheterModel, ...kit];
+    // Build targets array with combined catheter models
+    let targets = [...kit];
+    
+    if (currentCombinedCatheter && currentCombinedCatheter.visible) targets.push(currentCombinedCatheter);
+    
+    if (instructionNumber === 9) {
+        targets = [...targets, ...deployedInstruments];
+    }
 
     return raycaster.intersectObjects(targets, true);
 }
@@ -1726,6 +2502,12 @@ function animate() {
     // UI updates
     ThreeMeshUI.update();   
     updateButtons();
+
+    // Animate arrow indicators
+    animateArrows();
+
+    // Check drape collision while dragging (for green glow feedback)
+    checkDrapeCollisionWhileDragging();
 
     // // Lubricant animation handling
     // if (isAnimatingLubricant && lubricantObject) {
@@ -1816,3 +2598,5 @@ window.addEventListener('resize', () => {
 //         document.body.style.cursor = 'default'; // Reset cursor
 //     }
 // }
+
+
