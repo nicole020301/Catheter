@@ -136,11 +136,11 @@ const stepRequiredTools = {
     '1': ['GLTF/catheterKit/11. Sterile Gloves_Closed.glb'], // Sterile gloves
     '2': ['GLTF/catheterKit/12. Full Drape.glb', 'GLTF/catheterKit/13. Fenestrated Drape.glb'], // Drapes
     '3': ['GLTF/catheterKit/5. Swabsticks1.glb', 'GLTF/catheterKit/6. Swabsticks2.glb', 'GLTF/catheterKit/7. Swabsticks3.glb'], // Swabsticks
-    '4': ['GLTF/catheterKit/4. Lubricant.glb'], // Lubricant
+    '4': ['GLTF/catheterKit/4. Lubricant.glb', 'GLTF/catheterKit/10. Catheter.glb'], // Lubricant and catheter
     '5': ['GLTF/catheterKit/3. Saline Syringe.glb', 'GLTF/catheterKit/9. Urine Collection Bag.glb', 'GLTF/catheterKit/10. Catheter.glb'], // Syringe, urine bag, catheter
     '6': ['combined_catheter'], // Special case for combined catheter
-    '7': [], // Inflate button (special case)
-    '8': [], // Inflate button (special case)
+    '7': ['deployed_deflated_catheter'], // Special case for deployed deflated catheter with syringe
+    '8': ['deployed_inflated_catheter'], // Special case for deployed inflated catheter with syringe
     '9': ['deployed_drapes'], // Special case for deployed drapes
     '10': [] // End
 };
@@ -619,6 +619,12 @@ function showArrowsForStep(stepNumber) {
         // Handle special cases
         if (toolPath === 'combined_catheter' && currentCombinedCatheter && currentCombinedCatheter.visible) {
             targetTool = currentCombinedCatheter;
+        } else if (toolPath === 'deployed_deflated_catheter' && deflatedCatheter && deflatedCatheter.visible) {
+            // Handle deployed deflated catheter (step 7 - inflate balloon)
+            targetTool = deflatedCatheter;
+        } else if (toolPath === 'deployed_inflated_catheter' && inflatedCatheter && inflatedCatheter.visible) {
+            // Handle deployed inflated catheter (step 8 - remove syringe)  
+            targetTool = inflatedCatheter;
         } else if (toolPath === 'deployed_drapes') {
             // Handle deployed drapes
             const fullDrape = deployedInstruments.find(obj => obj.userData.path === "GLTF/deployed/FullDrape.glb");
@@ -648,6 +654,22 @@ function showArrowsForStep(stepNumber) {
         if (targetTool && targetTool.visible) {
             const arrow = createArrowIndicator();
             positionArrowAboveTool(arrow, targetTool);
+            
+            // Apply manual offset adjustments for special deployed catheter models
+            if (toolPath === 'deployed_deflated_catheter') {
+                // Manual offset for deflated catheter (step 7) - adjust to point at syringe
+                arrow.position.x += 0.13;  // Adjust X offset as needed
+                arrow.position.y -= 0.1;  // Adjust Y offset as needed  
+                arrow.position.z -= 0.0;  // Adjust Z offset as needed
+                console.log("Applied manual offset for deployed deflated catheter arrow");
+            } else if (toolPath === 'deployed_inflated_catheter') {
+                // Manual offset for inflated catheter (step 8) - adjust to point at syringe
+                arrow.position.x += 0.13;  // Adjust X offset as needed
+                arrow.position.y -= 0.1;  // Adjust Y offset as needed
+                arrow.position.z -= 0.0;  // Adjust Z offset as needed  
+                console.log("Applied manual offset for deployed inflated catheter arrow");
+            }
+            
             scene.add(arrow);
             arrowIndicators.push(arrow);
             toolArrowMap.set(targetTool, arrow);
