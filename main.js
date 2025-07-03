@@ -1253,7 +1253,7 @@ function loadKit(){
     let loadedCount = 0;
     const totalItems = catheterKit.length;
     
-    catheterKit.forEach(({ path }) => {
+     catheterKit.forEach(({ path }) => {
         loader.load(
             path,
             (gltf) => {
