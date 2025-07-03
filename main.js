@@ -997,6 +997,52 @@ function updateButtons() {
     });
 }
 
+function updateLaserColors() {
+    // Update laser color based on intersections with interactive objects
+    [controller1, controller2].forEach(controller => {
+        if (!controller) return;
+        
+        // Find the laser mesh in the controller's children
+        const laser = controller.children.find(child => 
+            child.type === 'Mesh' && 
+            child.geometry.type === 'CylinderGeometry'
+        );
+        
+        if (!laser) return;
+        
+        // Get intersections for this controller
+        const intersections = getIntersections(controller);
+        
+        // Check if we're pointing at any interactive object
+        const hasValidTarget = intersections.length > 0;
+        
+        // Update laser and base sphere colors
+        if (hasValidTarget) {
+            // Green when targeting interactive objects
+            laser.material.color.setHex(0x00ff00);
+            // Update base sphere color too
+            const baseSphere = controller.children.find(child => 
+                child.type === 'Mesh' && 
+                child.geometry.type === 'SphereGeometry'
+            );
+            if (baseSphere) {
+                baseSphere.material.color.setHex(0x00ff00);
+            }
+        } else {
+            // Red when not pointing at anything interactive
+            laser.material.color.setHex(0xff0000);
+            // Update base sphere color too
+            const baseSphere = controller.children.find(child => 
+                child.type === 'Mesh' && 
+                child.geometry.type === 'SphereGeometry'
+            );
+            if (baseSphere) {
+                baseSphere.material.color.setHex(0xff0000);
+            }
+        }
+    });
+}
+
 function raycast() {
     return objsToTest.reduce((closestIntersection, obj) => {
         const intersection = raycaster.intersectObject(obj, true);
@@ -2081,22 +2127,37 @@ function setupController(controller) {
     controller.addEventListener('selectstart', onSelectStart);
     controller.addEventListener('selectend', onSelectEnd);
     
-    // Add a laser guide to the controller
-    const laserGeometry = new THREE.BufferGeometry().setFromPoints([
-        new THREE.Vector3(0, 0, 0),
-        new THREE.Vector3(0, 0, -0.01) // Direction of the laser
-    ]);
-
-    const laserMaterial = new THREE.LineBasicMaterial({ color: 0xff0000 });
-    const laser = new THREE.Line(laserGeometry, laserMaterial);
-    laser.scale.z = 2; // Adjust the length of the laser
-
+    // Create improved laser beam using cylinder geometry for better visibility (shortened)
+    const laserGeometry = new THREE.CylinderGeometry(0.002, 0.002, 0.03, 8); // Shortened from 0.05 to 0.03 (3cm)
+    const laserMaterial = new THREE.MeshBasicMaterial({ 
+        color: 0xff0000,        // Red color (default state)
+        opacity: 0.5,           // 50% transparency for subtlety
+        transparent: true       // Enable transparency
+    });
+    const laser = new THREE.Mesh(laserGeometry, laserMaterial);
+    
+    // Position and orient the laser to point forward
+    laser.position.z = -0.015;      // Center the shorter cylinder at half its length (0.03/2 = 0.015)
+    laser.rotation.x = Math.PI / 2; // Rotate to point forward along Z-axis
+    
+    // Create base sphere indicator at the controller origin (much larger)
+    const baseSphereGeometry = new THREE.SphereGeometry(0.008, 8, 6);
+    const baseSphereMaterial = new THREE.MeshBasicMaterial({ 
+        color: 0xff0000,        // Red color (matches laser)
+        opacity: 0.6,           // 60% transparency
+        transparent: true       // Enable transparency
+    });
+    const baseSphere = new THREE.Mesh(baseSphereGeometry, baseSphereMaterial);
+    
+    // Position base sphere at the origin (base) of the laser
+    baseSphere.position.set(0, 0, 0); // At controller origin
+    
+    // Add both laser and base sphere to the controller
     controller.add(laser);
+    controller.add(baseSphere);
 }
 
-// Add laser to both hands
-setupController(hand1);
-setupController(hand2);
+// Laser setup moved to after controller definition
 
 function onSelectStart(event) {
     selectState = true;
@@ -2433,18 +2494,7 @@ const controller2 = renderer.xr.getController(1);
 scene.add(controller1);
 scene.add(controller2);
 
-// Attach helper spheres to visualize the controllers
-const controller1Helper = new THREE.Mesh(
-    new THREE.SphereGeometry(0.01),
-    new THREE.MeshBasicMaterial({ color: 0xff0000 })
-);
-controller1.add(controller1Helper);
-
-const controller2Helper = new THREE.Mesh(
-    new THREE.SphereGeometry(0.01),
-    new THREE.MeshBasicMaterial({ color: 0x0000ff })
-);
-controller2.add(controller2Helper);
+// Controller helper spheres removed - now using laser fingertip indicators instead
 
 // Add controller grips
 const controllerGrip1 = renderer.xr.getControllerGrip(0);
@@ -2524,6 +2574,11 @@ function animate() {
     // UI updates
     ThreeMeshUI.update();   
     updateButtons();
+    
+    // Update laser pointer colors for VR controllers
+    if (renderer.xr.isPresenting) {
+        updateLaserColors();
+    }
 
     // Animate arrow indicators
     animateArrows();
