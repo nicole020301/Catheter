@@ -3,93 +3,168 @@
   <head>
     <meta charset="UTF-8" />
     <title>Catheter Module</title>
-    <!-- <style>
+    <style>
       body {
         margin: 0;
+        padding: 0;
         overflow: hidden;
         font-family: sans-serif;
+        background: #000;
       }
 
-      canvas {
-        display: block;
-      }
-
-      #pre-xr-overlay {
+      #main-menu-image {
         position: fixed;
         top: 0;
         left: 0;
         width: 100%;
         height: 100%;
-        z-index: 999;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        flex-direction: column;
-        background: lightgreen;
-        color: black;
-        font-size: 2rem;
+        object-fit: cover;
+        z-index: 1;
       }
 
-      #progress-bar-container {
-        width: 50%;
-        height: 20px;
-        background: #eee;
-        border: 1px solid #ccc;
-        margin-bottom: 1rem;
-      }
-
-      #progress-bar {
+      /* Loading Indicator Overlay */
+      #loading-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
         height: 100%;
-        width: 0%;
-        background: #76c7c0;
+        background: rgba(0, 0, 0, 0.7);
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        z-index: 10;
+        transition: opacity 0.5s ease-out;
       }
 
-      #progress {
-        font-size: 1.2rem;
-        margin-bottom: 1rem;
+      #loading-overlay.hidden {
+        opacity: 0;
+        pointer-events: none;
       }
-    </style> -->
+
+      /* Loading Spinner */
+      .loading-spinner {
+        width: 60px;
+        height: 60px;
+        border: 4px solid rgba(255, 255, 255, 0.3);
+        border-top: 4px solid #ffffff;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin-bottom: 20px;
+      }
+
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+
+      /* Loading Text */
+      .loading-text {
+        color: #ffffff;
+        font-size: 18px;
+        font-weight: 500;
+        text-align: center;
+        margin-bottom: 10px;
+      }
+
+      .loading-subtext {
+        color: rgba(255, 255, 255, 0.7);
+        font-size: 14px;
+        text-align: center;
+      }
+
+      /* Pulsing animation for text */
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.6;
+        }
+      }
+
+      .loading-text {
+        animation: pulse 2s ease-in-out infinite;
+      }
+
+      .video-element {
+        display: none;
+      }
+
+      /* Hide the main menu when XR starts */
+      body.xr-active #main-menu-image {
+        display: none;
+      }
+
+      body.xr-active canvas.webGL {
+        display: block;
+      }
+
+      /* Hide loading overlay during XR */
+      body.xr-active #loading-overlay {
+        display: none;
+      }
+
+      /* Styling for disabled XR button */
+      button:disabled {
+        opacity: 0.5 !important;
+        cursor: not-allowed !important;
+        pointer-events: none !important;
+        filter: grayscale(1);
+      }
+    </style>
   </head>
   <body>
-    <!-- <canvas class="webGL"></canvas> -->
-
-    <!-- <div id="pre-xr-overlay">
-      <div id="progress-bar-container">
-        <div id="progress-bar"></div>
+    <!-- Loading Overlay -->
+    <div id="loading-overlay">
+      <div class="loading-spinner"></div>
+      <div class="loading-text">Loading 3D Models...</div>
+      <div class="loading-subtext">
+        Please wait while we prepare your experience
       </div>
-      <p id="progress">0%</p>
-      <p>Press the XR Button to Start</p>
-    </div> -->
+    </div>
+
+    <!-- Canvas for Three.js rendering (hidden by default, shown during XR) -->
+    <canvas class="webGL"></canvas>
+
+    <!-- Main Menu Image for XR Mode -->
+    <img
+      id="main-menu-image"
+      src="/Main Menu 1.jpg"
+      alt="Catheter Kit Main Menu"
+    />
+
+    <!-- Video Elements (hidden by default) -->
+    <video
+      id="Boy Vo Sterile Glove"
+      class="video-element"
+      width="1920"
+      height="1080"
+      src="/videos/Boy Vo Sterile Glove.mp4"
+    ></video>
 
     <video
-		id="Boy Vo Sterile Glove"
-		width = "1920"
-		height = "1080"
-		style="display: none"
-		src="public/videos/Boy Vo Sterile Glove.mp4"
-		></video>
-		<canvas class="webGL"> </canvas>
-		<script type="module" src="/main.js"></script>,
-	
-	 <video
-		id="Basic Anatomy Without Caption"
-		width = "1920"
-		height = "1080"
-		style="display: none"
-		src="public/videos/Basic Anatomy Without Caption.mp4"
-		></video>
-		<canvas class="webGL"> </canvas>
-		<script type="module" src="/main.js"></script>,
+      id="Basic Anatomy Without Caption"
+      class="video-element"
+      width="1920"
+      height="1080"
+      src="/videos/Basic Anatomy Without Caption.mp4"
+    ></video>
 
-	 <video
-		id="Foley Catheter And Drainage"
-		width = "1920"
-		height = "1080"
-		style="display: none"
-		src="public/videos/Foley Catheter And Drainage.mp4"
-		></video>
-		<canvas class="webGL"> </canvas>
-		<script type="module" src="/main.js"></script>,
-    
+    <video
+      id="Foley Catheter And Drainage"
+      class="video-element"
+      width="1920"
+      height="1080"
+      src="/videos/Foley Catheter And Drainage.mp4"
+    ></video>
+
+    <script type="module" src="/main.js"></script>
   </body>
 </html>

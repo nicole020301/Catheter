@@ -1,41 +1,41 @@
 {
-  
+  
   "dependencies": {
-  
-    
+  
+    
   "cannon-es": "^0.20.0",
-  
-    
+  
+    
   "fs": "^0.0.1-security",
-  
-    
+  
+    
   "path": "^0.12.7",
-  
-    
+  
+    
   "three": "^0.171.0",
-  
-    
+  
+    
   "three-mesh-ui": "^6.5.4"
-  
+  
   },
-  
+  
   "devDependencies": {
-  
-    
+  
+    
   "@vitejs/plugin-basic-ssl": "^1.2.0",
-  
-    
+  
+    
   "vite": "^6.0.2"
-  
+  
   },
-  
+  
   "scripts": {
-  
-    
+  
+    
   "dev": "vite --host",
-  
-    
+  
+    
   "build": "vite build"
-  
+  
   }
 }
