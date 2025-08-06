@@ -837,7 +837,7 @@ function makeTextPanel(instructionNumber) {
     playVideo("Basic Anatomy Without Caption");
   }
   //parts ng catheter
-  if (instructionNumber == 6) {
+  if (instructionNumber == 5) {
     playVideo("Foley Catheter And Drainage");
   }
   if (instructionNumber == 6) {
